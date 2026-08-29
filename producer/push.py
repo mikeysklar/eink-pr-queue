@@ -26,9 +26,34 @@ import sys
 import urllib.error
 import urllib.request
 
+WEBHOOK_HOST = "io.adafruit.com"
 HISTORY_ON_LIMIT = 1024
 HISTORY_OFF_LIMIT = 100 * 1024
 STATE_FILE = pathlib.Path(".push-state.json")
+
+
+def normalize_url(url):
+    """Validate the webhook URL without ever echoing it.
+
+    The URL is a credential: it is the only thing standing between the
+    internet and your feed. So every message here describes the SHAPE that
+    was wrong, never the value, which also keeps it out of CI logs.
+    """
+    if not url:
+        return None, ("no webhook URL: set AIO_WEBHOOK_URL or pass --url")
+    url = url.strip()
+    if url.startswith("http://"):
+        return None, ("webhook URL is http://, refusing to send a credential "
+                      "in the clear. Use https://")
+    if not url.startswith("https://"):
+        # The overwhelmingly common paste error is dropping the scheme.
+        if url.startswith(WEBHOOK_HOST + "/"):
+            return "https://" + url, None
+        return None, (
+            "webhook URL has no https:// scheme "
+            f"({len(url)} chars, starts {url[:4]!r}...). "
+            f"Expected https://{WEBHOOK_HOST}/api/v2/webhooks/feed/<token>")
+    return url, None
 
 
 def post(url, value, timeout=15):
@@ -75,10 +100,12 @@ def main():
     if args.dry_run:
         print(f"[dry run] would POST {size} bytes ({digest})")
         return
-    if not args.url:
-        sys.exit("no webhook URL: set AIO_WEBHOOK_URL or pass --url")
 
-    status, body = post(args.url, value)
+    url, problem = normalize_url(args.url)
+    if problem:
+        sys.exit("push.py: " + problem)
+
+    status, body = post(url, value)
     if status != 200:
         sys.exit(f"webhook returned {status}: {body}")
     STATE_FILE.write_text(json.dumps({"digest": digest, "bytes": size}))
