@@ -156,7 +156,13 @@ def connect_wifi():
         except (RuntimeError, ConnectionError) as err:
             print("  retry:", err)
             time.sleep(3)
-    print("wifi ok, rssi", esp.rssi)
+    # Signal strength is a log line, not a feature, so it must never be able
+    # to take down the boot. ap_info is None until the link is up, and the
+    # attribute has moved between library versions.
+    try:
+        print("wifi ok, rssi", esp.ap_info.rssi)
+    except (AttributeError, RuntimeError):
+        print("wifi ok")
 
 
 # --- state ------------------------------------------------------------------
