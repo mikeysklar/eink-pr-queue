@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2026 Mikey Sklar
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: update panel
+
+on:
+  schedule:
+    # Every 15 minutes. The panel will not refresh faster than every 180s
+    # anyway, so there is nothing to gain from a tighter interval, and
+    # GitHub's floor is 5 minutes regardless.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "owner/repo to watch"
+        default: "adafruit/circuitpython"
+      since_days:
+        description: "only PRs opened within this many days (blank = all open)"
+        default: "21"
+  # If a repository webhook is ever added upstream, point it at a small relay
+  # that fires this event type and the same job runs, no rework:
+  #   POST /repos/mikeysklar/eink-pr-queue/dispatches {"event_type":"pr-changed"}
+  repository_dispatch:
+    types: [pr-changed]
+
+concurrency:
+  group: update-panel
+  cancel-in-progress: true
+
+jobs:
+  render-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render the panel and push it to the Adafruit IO feed
+        env:
+          # Read-only, public-repo access. gh picks this up automatically.
+          GH_TOKEN: ${{ github.token }}
+          # The webhook URL is its own credential, scoped to one feed, so this
+          # runner never holds the Adafruit IO account key.
+          AIO_WEBHOOK_URL: ${{ secrets.AIO_WEBHOOK_URL }}
+          REPO: ${{ github.event.inputs.repo || 'adafruit/circuitpython' }}
+          SINCE_DAYS: ${{ github.event.inputs.since_days || '21' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AIO_WEBHOOK_URL:-}" ]; then
+            echo "::error::secret AIO_WEBHOOK_URL is not set."
+            echo "Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          cd producer
+          ARGS=(--limit 200)
+          [ -n "$SINCE_DAYS" ] && ARGS+=(--since-days "$SINCE_DAYS")
+          ./collect.py "$REPO" "${ARGS[@]}" -o raw.json
+          ./score.py raw.json -o rows.json
+          ./render.py rows.json -o payload.txt
+          # No .push-state.json survives between runs, so every run pushes.
+          # That is harmless: the feed has history off so the value is simply
+          # overwritten, and the panel skips a repaint when the screen is
+          # unchanged. Nothing accumulates and no refresh is wasted.
+          ./push.py payload.txt
+
+      - name: Show what was drawn
+        if: always()
+        run: cat producer/payload.txt 2>/dev/null || echo "(nothing rendered)"
