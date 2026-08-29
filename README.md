@@ -15,13 +15,9 @@ dashboard onto 4.2 inch eInk via Adafruit IO.
 | FeatherWing Doubler | [#2890](https://www.adafruit.com/product/2890) | $7.50 |
 | | | **$62.90** |
 
-Prices as listed 2026-08-29. Plus a USB C cable, and a 3.7V LiPo if you want
-it off mains, though see the deep sleep note below before planning on battery.
 
-The display ribbon goes straight into the ThinkInk's ZIF socket with no
-wiring. Mounting the AirLift beside it on the doubler means soldering
-headers. The doubler is what puts the two Feathers side by side; stacking
-headers would work equally well and is cheaper, it just makes a taller stack.
+Prices 2026-08-29. Ribbon plugs into the ZIF socket. The wing needs headers
+soldered; stacking headers work instead of the doubler.
 
 ## How it connects
 
@@ -32,9 +28,9 @@ headers would work equally well and is cheaper, it just makes a taller stack.
   │    update-panel.yml             repository_dispatch(pr-changed)  │
   │                                                                  │
   │  collect.py ──▶ score.py ──▶ render.py ──▶ push.py               │
-  │   gh pr list    5 concerns   66x21 text    HTTPS POST            │
-  │   --since-days  worst-of-5   worst-first   skip if unchanged     │
-  │       90                                                         │
+  │  gh pr list     5 concerns   66x21 text    HTTPS POST            │
+  │  --since-days   worst-of-5   + QR url      always: a fresh       │
+  │      90         sorts rows   narrow rows   VM keeps no state     │
   │                                                                  │
   │  secret: AIO_WEBHOOK_URL   (a capability URL, not the account    │
   │                             key, so the runner holds no AIO_KEY) │
@@ -72,13 +68,10 @@ headers would work equally well and is cheaper, it just makes a taller stack.
         └─────────────────────────────┘
 ```
 
-The webhook is the way in and MQTT is the way out. The panel cannot receive an
-inbound HTTP push, so it subscribes instead. Adafruit IO's outbound Actions
-are not used.
+The webhook is the way in, MQTT the way out. The panel cannot receive an
+inbound push, so it subscribes.
 
 ## How the three talk
-
-Each hop uses a different protocol and a different credential.
 
 ```
 ┌─ GitHub runner ──────────────────────────────────────┐
@@ -101,39 +94,22 @@ Each hop uses a different protocol and a different credential.
 └──────────────────────────────────────────────────────┘
 ```
 
-**The runner and the panel never meet.** They do not know each other exists.
-Adafruit IO is a mailbox: one drops off, the other picks up. Either can be
-offline without breaking the other.
-
-**Direction reverses at the broker.** GitHub to IO is a push the runner
-initiates. IO to panel is also a push, but only because the panel opened a
-long-lived MQTT connection first and is holding it open. The panel never
-polls; it sits on a socket and the broker writes to it.
-
-**Different credentials by design.** The runner holds only the webhook URL,
-which can write one feed and nothing else. The real `AIO_KEY`, which can read
-and delete every feed on the account, exists only in `settings.toml` on the
-board. If the repo secret leaked, the blast radius is "someone can write junk
-to one feed", rate limited to 2 per minute. That asymmetry is the main
-security property of the design, and it is why the webhook is the right
-ingest rather than the REST API.
-
-The `/get` publish is the one upstream message: it asks the broker to replay
-the current value, so a panel booting between hourly runs does not sit blank.
+- **They never meet.** IO is a mailbox. Either side can be offline.
+- **The panel never polls.** It holds an MQTT socket open and gets written to.
+- **Credentials are split.** The runner gets a one-feed capability URL. The
+  account key never leaves the board.
+- **`/get`** is the one upstream message: replay the value so a fresh boot is
+  not blank.
 
 ## The one wiring rule
 
-**The panel goes in the ThinkInk's own ZIF socket.** Wiring it to the header
-via EyeSPI puts its RST and BUSY on D11 and D12, which is exactly where the
-AirLift's READY and RESET live. In the ZIF socket the panel sits on SPI0 and
-the radio has the header bus to itself, so the two never touch.
+Panel goes in the ZIF socket. Via EyeSPI its RST and BUSY collide with the
+AirLift. D13 is also `board.LED`, so it flickers.
 
 | | Bus | Pins |
 |---|---|---|
-| Panel | SPI0, onboard 24-pin ZIF | `EPD_SCK`/`EPD_MOSI` GPIO22/23, `EPD_CS`/`DC`/`RESET`/`BUSY` GPIO16-19 |
+| Panel | SPI0, onboard ZIF | `EPD_SCK`/`MOSI` GPIO22/23, `CS`/`DC`/`RESET`/`BUSY` GPIO16-19 |
 | AirLift | Feather header SPI | SCK/MOSI/MISO GPIO14/15/8, CS=D13, READY=D11, RESET=D12 |
-
-D13 is also `board.LED`, so the red LED flickers on SPI traffic. Cosmetic.
 
 ## What is in here
 
@@ -143,8 +119,8 @@ D13 is also `board.LED`, so the red LED flickers on SPI traffic. Cosmetic.
 
 producer/                 runs on GitHub's runners, not your machine
   collect.py              gh pr list        -> raw.json
-  score.py                five concerns     -> rows.json
-  render.py               layout            -> the 66x21 screen
+  score.py                five concerns, sorts worst-first -> rows.json
+  render.py               layout + the QR url -> the 66x21 screen
   push.py                 POST to the Adafruit IO feed webhook
   update.sh               all four, for running it by hand
 
@@ -156,13 +132,9 @@ pics/
   eink-pr-queue.jpeg      the panel running, used at the top of this file
 ```
 
-Everything under `producer/` is stdlib Python plus the `gh` CLI, so it runs
-locally exactly as it runs in CI. `.gitignore` keeps `.work/`, the real
-`settings.toml`, and `.push-state.json` out of the repo.
+Stdlib Python plus `gh`, so it runs locally exactly as in CI.
 
 ## Producer
-
-Pure stdlib Python plus the `gh` CLI. Nothing to install.
 
 ```sh
 cd producer
@@ -174,62 +146,48 @@ DRY_RUN=1 ./update.sh adafruit/circuitpython --since-days 90   # render only
 |---|---|---|
 | `collect.py` | `gh pr list` into `raw.json` | none, facts only |
 | `score.py` | five concerns into `rows.json` | three of five, mechanically |
-| `render.py` | the exact 66x21 panel text | layout only |
+| `render.py` | the 66x21 panel text | layout only |
 | `push.py` | POST to the feed webhook | none |
 
-### What the scoring does and does not do
+### Scoring
 
-Each PR is scored on five concerns and takes the **worst, never the average**.
-Three are mechanical. Two are not:
+Worst of five, never the average.
 
-- **APIs / interfaces** always comes out `null`. Deciding whether a PR reuses
-  the established convention needs the diff read against recently merged work
-  in the same area. No regex does that.
-- **Single problem** only reaches `med`, via a weak proxy (a diff fanning
-  across many top-level trees).
+| Concern | Ceiling | Why |
+|---|---|---|
+| Size | med | proportionality needs the problem read |
+| Files | **HIGH** | core-path blast radius, the only mechanical HIGH |
+| APIs | `null` | needs the diff read against merged work nearby |
+| Tested | med | a missing claim is a flag, not a verdict |
+| Single problem | med | weak proxy: diff fanning across top-level trees |
 
-Size and tested also cap at `med` on purpose: a big diff for a big well-scoped
-problem is not a flag, and a missing test claim on a two-line change is barely
-one. **High comes from core-path blast radius, or from a judgment a human or
-model supplied.** To supply one, edit `rows.json`, set `concerns.apis` or
-`concerns.single` to 0/1/2, and recompute:
+Edit `rows.json` and recompute:
 
 ```sh
 ./score.py .work/rows.json --rescore -o .work/rows.json
 ```
 
-Core paths per repo live in `CORE_PATHS` in `score.py`. For an unlisted repo,
-pass `--core-path py/ --core-path shared-bindings/` or the concern degrades to
-a plain file count and says so.
+Core paths live in `CORE_PATHS`. Unlisted repos need `--core-path`.
 
-### Feed setup, and the thing that will bite you
+### Feed setup
 
-Create a feed, then **turn history OFF** (Feed > Feed Info > History).
+Turn feed history **OFF**, or every push fails on size.
 
 | History | Max bytes per value |
 |---|---|
 | on | 1,024 |
-| off | 524,288, per the feed's own history dialog |
-
-Adafruit's two dialogs disagree on the off figure: the history dialog says
-512KB (524288 bytes), the webhook dialog says 100 kilobytes. Either is ample
-here. The number that actually matters is the 1,024 while history is ON,
-because a full 21-row screen is 1.0 to 1.4KB and every push fails against it.
-
-Nothing is lost by turning history off: only the newest value is ever drawn,
-and MQTT `/get` returns it on demand. Then:
+| off | 524,288 |
 
 ```sh
 export AIO_WEBHOOK_URL="https://io.adafruit.com/api/v2/webhooks/feed/XXXXXXXX"
 ```
 
-The token is in the URL, so no API key travels with the request. `push.py`
-hashes the last payload and skips an identical push.
+The token is the URL, so no API key travels.
 
 ## Wire format
 
-The payload is **the finished screen**, not data. All layout happens on the
-host.
+The finished screen, not data. Layout is host-side, so redesigning never
+means reflashing.
 
 ```
 66 columns x 21 rows, newline separated, trailing spaces stripped
@@ -237,164 +195,80 @@ a line beginning with '~' is drawn white-on-black (the title bar)
 a line beginning with '@' is not a row: it carries a URL to draw as a QR
 ```
 
-The last 8 rows are narrowed to 47 columns because a QR block is reserved in
-the bottom right corner. The device strips the `@` line before layout, so it
-never consumes a row, and a payload without one simply draws no QR.
-
-66x21 is what 400x300 gives you with the `adafruit_epd` built-in 6x8 font,
-using 396x294 of the panel. Doing it this way means every layout change is a
-host-side edit with no reflash.
-
-Row anatomy:
-
 ```
 >*#10283 rianadon       492d  13f    +517/-1 HIGH changes req. CI!
 ||
-|+-- '*' stale: no maintainer review past --stale-days (default 180)
+|+-- '*' stale, no maintainer review past --stale-days (180)
 +--- '>' overall risk High
 ```
 
+Last 8 rows narrow to 47 columns for the QR.
+
 ## Notes from building it
 
-**Mono, not 4-gray.** The `Adafruit_SSD1683_Grayscale4` class works and shading
-each risk level a different tone was tried on real glass. It read badly: the
-6x8 font is too fine for DARK and LIGHT to stay crisp. Mono also halves the
-framebuf, 15KB instead of 30KB, and draws in 8.0s instead of 10.0s.
+| Decision | Why |
+|---|---|
+| Mono, not 4-gray | tried on glass, the 6x8 font is too fine for mid tones. Also 15KB not 30KB, 8s not 10.5s |
+| `adafruit_epd`, not displayio | displayio collapses the X window to ~8px of speckle on panels 256px or wider |
+| QR built on device | host sends a 43 byte URL, not a bitmap. 0.66s to generate, 0.81s to draw |
+| QR at ECC Q | 25% recovery survives a photo of a photo. Verified at 5.6px per module |
+| NeoPixel as status | a wall panel cannot report for itself without burning an 8s refresh |
+| Hold, never drop | a payload arriving inside the 180s floor waits instead of being discarded |
 
-**adafruit_epd, not displayio.** The displayio SSD1683 path has a bug on panels
-256px or wider: the core switches command 0x44 to 2-byte column addressing, but
-on SSD168x 0x44 is byte-addressed, so the X window collapses to about 8px and
-the rest is stale-RAM speckle. The framebuf path does not have it.
-
-**The QR is generated on the device, not shipped in the payload.** The host
-sends a 43 byte URL and `adafruit_miniqr` builds the code, which costs 0.66s
-to generate and 0.81s to draw against a refresh that already takes 10s.
-Shipping a bitmap instead would have cost roughly a hundred times the bytes
-for no gain.
-
-ECC Q (25% recovery) rather than L (7%), because the code has to survive
-being photographed, and sometimes photographed from a photograph. At 33
-modules and 3px each it occupies 99px.
-
-Worth knowing if you change the URL: comparing a generated matrix against a
-reference encoder byte for byte does not work, because two encoders make
-different but equally valid mask and padding choices. The check that means
-something is decoding it. Rendering the matrix to a PNG and running
-`cv2.QRCodeDetector().detectAndDecode()` over it takes a moment and actually
-proves the thing scans.
-
-**RAM is not the constraint.** 67KB free of 264KB with every import loaded and
-the framebuf allocated.
-
-**The NeoPixel is the status display.** A wall panel cannot report for itself
-without burning an 8 second refresh, so the LED carries state: amber
-initialising or painting, red WiFi or MQTT down, blue connected, green idle
-and current.
+RAM was never the constraint: 67KB free of 264KB. Verify a QR by decoding,
+not by comparing matrices.
 
 ## Why this polls instead of using a webhook
 
-The obvious design is a GitHub webhook firing straight into the Adafruit IO
-feed. It is not available here, and the reason is worth writing down because
-everyone asks.
+Repository webhooks need admin. A PR cannot add one.
 
-**Repository webhooks require admin on the repo being watched.** This panel
-watches `adafruit/circuitpython`, where a contributor typically has `push`
-but `admin: false`. A pull request cannot add one either: webhooks live in
-repo Settings, created via `POST /repos/{owner}/{repo}/hooks`, and are not
-files in the tree.
-
-That gate is general, and every automation vendor ships both sides of it.
-Pipedream states the rule plainly in its own
-[component README](https://github.com/PipedreamHQ/pipedream/blob/master/components/github/README.md):
-
-> "The GitHub triggers in Pipedream enable you to get notified immediately
-> via a webhook if you have admin rights on the repo you're watching [...]
-> Otherwise you can still poll for updates at a regular interval for any
-> other repo where you might not have admin rights."
-
-So a service marked "(Instant)" creates a repo webhook and needs admin. The
-plain variant polls with your OAuth token and needs nothing.
-
-### What is actually available without admin
+> "The GitHub triggers in Pipedream enable you to get notified immediately via
+> a webhook if you have admin rights on the repo you're watching [...]
+> Otherwise you can still poll for updates at a regular interval for any other
+> repo where you might not have admin rights."
+> [Pipedream](https://github.com/PipedreamHQ/pipedream/blob/master/components/github/README.md)
 
 | Mechanism | No admin? | Push or poll |
 |---|---|---|
 | Repository webhooks | no | push |
 | GitHub App install | no, needs org owner | push |
-| PubSubHubbub (`github.com/hub`) | no, defunct | n/a |
+| PubSubHubbub | no, defunct | n/a |
 | Atom feeds | no PR or issue feed exists | poll |
-| Public events API | **yes** | poll |
-| Actions triggered by a third-party repo | no | n/a |
-| **Watch + email notifications** | **yes** | **genuine push** |
+| Public events API | **yes** | poll, [30s to 6h](https://docs.github.com/en/rest/activity/events) |
+| Actions from a third-party repo | no | n/a |
+| **Watch + email** | **yes** | **genuine push** |
 
-Only the last is real push with no permission. Anyone can Watch a public
-repo, and GitHub's backend then emails you on PR activity. Routed to a
-dedicated address and through a mail-to-webhook bridge, that is true push.
-The costs are a hosted mail bridge and the fact that Watching a repo as busy
-as CircuitPython is a firehose to filter.
+Hosted pollers need no admin either. Rejected on merit:
 
-A note on the events API, since it looks better than it is: it does carry
-`PullRequestEvent` unauthenticated, and conditional requests with `If-None-Match`
-return 304 without consuming rate limit, which makes continuous polling free.
-But `x-poll-interval: 60` says how often you may ask, not how fresh the answer
-is. [GitHub documents event latency as 30s to 6h](https://docs.github.com/en/rest/activity/events),
-and the endpoint sends `cache-control: max-age=300`.
-
-### Why no third-party bridge either
-
-Make.com, IFTTT and Pipedream can all poll a repo you do not administer and
-POST to the Adafruit IO webhook, with no admin anywhere. They were rejected
-on merit, not availability:
-
-- Make's free polling floor is 15 minutes. The Actions cron runs hourly and
-  a PR queue does not move faster than that, so a bridge buys nothing for one
-  more dependency.
-- A bridge cannot replace the producer. It can report that a PR changed, but
-  it cannot run the five-concern scoring or render 66x21 text, so the
-  workflow still has to run. The bridge could only trigger it, which means
-  storing a GitHub token in a third party to fire `repository_dispatch`.
-
-### And it would not carry the data anyway
-
-A `pull_request` event is about 35KB, of which the useful part is the PR
-object plus the repository object. It reports `changed_files` as an integer
-and contains no file paths. Core-path blast radius is what produces every
-High rating in this dashboard, so a re-fetch against the API is required no
-matter how the notification arrives.
-
-Adafruit's own [PyPortal GitHub Stars Trophy](https://learn.adafruit.com/pyportal-github-stars-trophy)
-guide reaches the same conclusion by a different route: to watch
-`adafruit/circuitpython`, a repo the reader does not own, it polls the API
-from the device every 60 seconds.
-
-Against a panel with a 180 second minimum between refreshes, none of this is
-visible at the glass.
+- Make's free floor is 15 minutes. The cron runs hourly.
+- No bridge can score or render, so the workflow still runs. It could only
+  trigger, which means a GitHub token in a third party.
+- A `pull_request` event is 35KB and gives `changed_files` as an integer with
+  no paths, so core-path scoring needs a re-fetch regardless.
+- Adafruit's own [PyPortal GitHub Stars Trophy](https://learn.adafruit.com/pyportal-github-stars-trophy)
+  polls `adafruit/circuitpython` every 60s from the device, for this reason.
 
 ## Verified end to end
 
-Running unattended as of 2026-08-29. Boot log from the board, for comparison
-if yours misbehaves:
+Boot log, for comparison if yours misbehaves.
 
 ```
 init panel on onboard ZIF (SPI0)
 init AirLift on header SPI
 nina-fw 3.3.0
 wifi: connecting to <ssid>
-wifi ok, rssi -56
+wifi ok, rssi -48
 mqtt: connecting
 mqtt connected, subscribed to <user>/f/pr-queue
-rx 781 bytes
-painting 781 bytes
-refresh took 7.9s
+rx 1122 bytes
+painting 1122 bytes
+qr: 33 modules at 3px for https://github.com/mikeysklar/eink-pr-queue
+refresh took 10.5s
 idle
 ```
 
-That `rx` arrived from the `/get` replay on connect, with no producer run
-involved. It is what stops a board that boots between pushes from sitting
-blank until the next one.
-
-`payload-test.txt` is worth keeping on the board as an offline fixture, so
-the panel can be re-tested with no network at all: read it, draw it.
+`rx` arrived from the `/get` replay, no producer run involved.
+`payload-test.txt` on the board is an offline fixture.
 
 ## Libraries
 
@@ -403,8 +277,8 @@ circup install adafruit_esp32spi adafruit_connection_manager \
                adafruit_minimqtt adafruit_ticks neopixel adafruit_miniqr
 ```
 
-`adafruit_epd`, `adafruit_framebuf` and `adafruit_bus_device` ship with most
-ThinkInk setups already.
+`adafruit_epd`, `adafruit_framebuf` and `adafruit_bus_device` usually ship
+already.
 
 ## License
 
