@@ -68,7 +68,7 @@ Pure stdlib Python plus the `gh` CLI. Nothing to install.
 
 ```sh
 cd producer
-DRY_RUN=1 ./update.sh adafruit/circuitpython --since-days 30   # render only
+DRY_RUN=1 ./update.sh adafruit/circuitpython --since-days 90   # render only
 ./update.sh adafruit/circuitpython --limit 200                 # render and push
 ```
 

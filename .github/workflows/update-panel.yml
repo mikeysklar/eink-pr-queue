@@ -15,7 +15,7 @@ on:
         default: "adafruit/circuitpython"
       since_days:
         description: "only PRs opened within this many days (blank = all open)"
-        default: "30"
+        default: "90"
   # If a repository webhook is ever added upstream, point it at a small relay
   # that fires this event type and the same job runs, no rework:
   #   POST /repos/mikeysklar/eink-pr-queue/dispatches {"event_type":"pr-changed"}
@@ -40,7 +40,7 @@ jobs:
           # runner never holds the Adafruit IO account key.
           AIO_WEBHOOK_URL: ${{ secrets.AIO_WEBHOOK_URL }}
           REPO: ${{ github.event.inputs.repo || 'adafruit/circuitpython' }}
-          SINCE_DAYS: ${{ github.event.inputs.since_days || '30' }}
+          SINCE_DAYS: ${{ github.event.inputs.since_days || '90' }}
         run: |
           set -euo pipefail
           if [ -z "${AIO_WEBHOOK_URL:-}" ]; then
