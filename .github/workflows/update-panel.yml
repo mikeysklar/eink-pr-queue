@@ -4,10 +4,10 @@ name: update panel
 
 on:
   schedule:
-    # Every 15 minutes. The panel will not refresh faster than every 180s
-    # anyway, so there is nothing to gain from a tighter interval, and
-    # GitHub's floor is 5 minutes regardless.
-    - cron: "*/15 * * * *"
+    # Hourly, on the hour. A PR queue moves a few times a day, the panel will
+    # not refresh faster than every 180s, and an unchanged screen is skipped
+    # anyway, so a tighter interval buys nothing visible.
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       repo:
@@ -15,7 +15,7 @@ on:
         default: "adafruit/circuitpython"
       since_days:
         description: "only PRs opened within this many days (blank = all open)"
-        default: "21"
+        default: "30"
   # If a repository webhook is ever added upstream, point it at a small relay
   # that fires this event type and the same job runs, no rework:
   #   POST /repos/mikeysklar/eink-pr-queue/dispatches {"event_type":"pr-changed"}
@@ -40,7 +40,7 @@ jobs:
           # runner never holds the Adafruit IO account key.
           AIO_WEBHOOK_URL: ${{ secrets.AIO_WEBHOOK_URL }}
           REPO: ${{ github.event.inputs.repo || 'adafruit/circuitpython' }}
-          SINCE_DAYS: ${{ github.event.inputs.since_days || '21' }}
+          SINCE_DAYS: ${{ github.event.inputs.since_days || '30' }}
         run: |
           set -euo pipefail
           if [ -z "${AIO_WEBHOOK_URL:-}" ]; then

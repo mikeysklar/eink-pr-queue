@@ -68,7 +68,7 @@ Pure stdlib Python plus the `gh` CLI. Nothing to install.
 
 ```sh
 cd producer
-DRY_RUN=1 ./update.sh adafruit/circuitpython --since-days 21   # render only
+DRY_RUN=1 ./update.sh adafruit/circuitpython --since-days 30   # render only
 ./update.sh adafruit/circuitpython --limit 200                 # render and push
 ```
 
@@ -226,8 +226,9 @@ Make.com, IFTTT and Pipedream can all poll a repo you do not administer and
 POST to the Adafruit IO webhook, with no admin anywhere. They were rejected
 on merit, not availability:
 
-- Make's free polling floor is 15 minutes, which is what the Actions cron
-  already does. Zero gain for one more dependency.
+- Make's free polling floor is 15 minutes. The Actions cron runs hourly and
+  a PR queue does not move faster than that, so a bridge buys nothing for one
+  more dependency.
 - A bridge cannot replace the producer. It can report that a PR changed, but
   it cannot run the five-concern scoring or render 66x21 text, so the
   workflow still has to run. The bridge could only trigger it, which means
