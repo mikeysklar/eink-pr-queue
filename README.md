@@ -9,10 +9,17 @@ dashboard onto 4.2 inch eInk via Adafruit IO.
 
 ```
   ┌──────────────────────────────────────────────────────────────────┐
-  │  YOUR MAC                                                        │
+  │  GITHUB ACTIONS          cron "0 * * * *"  (hourly, on the hour) │
+  │  .github/workflows/      also: workflow_dispatch (manual)        │
+  │    update-panel.yml             repository_dispatch(pr-changed)  │
   │                                                                  │
   │  collect.py ──▶ score.py ──▶ render.py ──▶ push.py               │
   │   gh pr list    5 concerns   66x21 text    HTTPS POST            │
+  │   --since-days  worst-of-5   worst-first   skip if unchanged     │
+  │       90                                                         │
+  │                                                                  │
+  │  secret: AIO_WEBHOOK_URL   (a capability URL, not the account    │
+  │                             key, so the runner holds no AIO_KEY) │
   └───────────────────────────────────────────────────┬──────────────┘
                                                       │ {"value": "..."}
                                                       ▼
@@ -21,9 +28,11 @@ dashboard onto 4.2 inch eInk via Adafruit IO.
                                            ┌──────────┴──────────┐
                                            │  feed: pr-queue     │
                                            │  history: OFF       │
+                                           │  rate limit: 2/min  │
                                            └──────────┬──────────┘
                                                       │ MQTT/TLS :8883
                                                       │ <user>/f/pr-queue
+                                                      │ + /get replay on boot
                                                       ▼
   ┌──────────────────────────────────────────────────────────────────┐
   │  FEATHER DOUBLER                                                 │
@@ -40,6 +49,9 @@ dashboard onto 4.2 inch eInk via Adafruit IO.
   │  │  D11         ◀─────────┼──────┼─── READY                   │  │
   │  │  D12         ──────────┼──────┼──▶ RESET                   │  │
   │  └───────────┬────────────┘      └────────────────────────────┘  │
+  │              │                                                   │
+  │   hash the payload: identical screen, no repaint                 │
+  │   hold, never drop, inside the 180s refresh floor                │
   └──────────────┼───────────────────────────────────────────────────┘
                  │ onboard 24-pin ZIF, SPI0, a SEPARATE bus
                  │ EPD_SCK/MOSI GPIO22/23 + CS/DC/RESET/BUSY GPIO16-19
@@ -47,7 +59,8 @@ dashboard onto 4.2 inch eInk via Adafruit IO.
         ┌─────────────────────────────┐
         │  4.2" 400x300 SSD1683       │
         │  #6381, FPC-190 ribbon      │
-        │  66 cols x 21 rows, 8s draw │
+        │  66 cols x 21 rows          │
+        │  8 to 11s full refresh      │
         └─────────────────────────────┘
 ```
 
