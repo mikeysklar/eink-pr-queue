@@ -1,0 +1,6 @@
+.work/
+.push-state.json
+*.pyc
+__pycache__/
+settings.toml
+.DS_Store

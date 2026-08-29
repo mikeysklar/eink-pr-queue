@@ -1,0 +1,11 @@
+# Copy to settings.toml on CIRCUITPY and fill in. Never commit the real one.
+WIFI_SSID = "your-ssid"
+WIFI_PASSWORD = "your-password"
+
+# Adafruit IO > My Key
+AIO_USERNAME = "your-aio-username"
+AIO_KEY = "aio_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+
+# Must match the feed the producer pushes to, and that feed needs history OFF
+# (history on caps a value at 1024 bytes; a full screen is 1.0-1.4KB).
+AIO_FEED = "pr-queue"
