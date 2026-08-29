@@ -5,6 +5,24 @@
 A Feather RP2040 ThinkInk and AirLift paint a GitHub pull request risk
 dashboard onto 4.2 inch eInk via Adafruit IO.
 
+## Bill of materials
+
+| Part | Adafruit | Price |
+|---|---|---|
+| 4.2" 400x300 mono / 4-gray eInk, SSD1683, bare display | [#6381](https://www.adafruit.com/product/6381) | $24.95 |
+| Feather RP2040 ThinkInk, 24-pin E-Paper connector | [#5727](https://www.adafruit.com/product/5727) | $17.50 |
+| AirLift FeatherWing, ESP32 WiFi co-processor | [#4264](https://www.adafruit.com/product/4264) | $12.95 |
+| FeatherWing Doubler | [#2890](https://www.adafruit.com/product/2890) | $7.50 |
+| | | **$62.90** |
+
+Prices as listed 2026-08-29. Plus a USB C cable, and a 3.7V LiPo if you want
+it off mains, though see the deep sleep note below before planning on battery.
+
+The display ribbon goes straight into the ThinkInk's ZIF socket with no
+wiring. Mounting the AirLift beside it on the doubler means soldering
+headers. The doubler is what puts the two Feathers side by side; stacking
+headers would work equally well and is cheaper, it just makes a taller stack.
+
 ## How it connects
 
 ```
