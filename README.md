@@ -111,11 +111,15 @@ Create a feed, then **turn history OFF** (Feed > Feed Info > History).
 | History | Max bytes per value |
 |---|---|
 | on | 1,024 |
-| off | 102,400 |
+| off | 524,288, per the feed's own history dialog |
 
-A full 21-row screen is 1.0 to 1.4KB, so with history on every push fails.
-Nothing is lost by turning it off: only the newest value is ever drawn, and
-MQTT `/get` returns it on demand. Then:
+Adafruit's two dialogs disagree on the off figure: the history dialog says
+512KB (524288 bytes), the webhook dialog says 100 kilobytes. Either is ample
+here. The number that actually matters is the 1,024 while history is ON,
+because a full 21-row screen is 1.0 to 1.4KB and every push fails against it.
+
+Nothing is lost by turning history off: only the newest value is ever drawn,
+and MQTT `/get` returns it on demand. Then:
 
 ```sh
 export AIO_WEBHOOK_URL="https://io.adafruit.com/api/v2/webhooks/feed/XXXXXXXX"
