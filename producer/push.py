@@ -49,10 +49,14 @@ def normalize_url(url):
         # The overwhelmingly common paste error is dropping the scheme.
         if url.startswith(WEBHOOK_HOST + "/"):
             return "https://" + url, None
+        # Deliberately no substring of the value. CI log masking matches the
+        # exact secret string, so printing even the first few characters
+        # slips past the mask and lands in a public log. Length alone is
+        # enough to tell a truncated paste from a wrong one.
         return None, (
-            "webhook URL has no https:// scheme "
-            f"({len(url)} chars, starts {url[:4]!r}...). "
-            f"Expected https://{WEBHOOK_HOST}/api/v2/webhooks/feed/<token>")
+            f"webhook URL has no https:// scheme ({len(url)} chars). "
+            f"Expected https://{WEBHOOK_HOST}/api/v2/webhooks/feed/<token>, "
+            "about 60 characters. Copy it from the feed page, not the feed name.")
     return url, None
 
 
