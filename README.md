@@ -171,6 +171,84 @@ without burning an 8 second refresh, so the LED carries state: amber
 initialising or painting, red WiFi or MQTT down, blue connected, green idle
 and current.
 
+## Why this polls instead of using a webhook
+
+The obvious design is a GitHub webhook firing straight into the Adafruit IO
+feed. It is not available here, and the reason is worth writing down because
+everyone asks.
+
+**Repository webhooks require admin on the repo being watched.** This panel
+watches `adafruit/circuitpython`, where a contributor typically has `push`
+but `admin: false`. A pull request cannot add one either: webhooks live in
+repo Settings, created via `POST /repos/{owner}/{repo}/hooks`, and are not
+files in the tree.
+
+That gate is general, and every automation vendor ships both sides of it.
+Pipedream states the rule plainly in its own
+[component README](https://github.com/PipedreamHQ/pipedream/blob/master/components/github/README.md):
+
+> "The GitHub triggers in Pipedream enable you to get notified immediately
+> via a webhook if you have admin rights on the repo you're watching [...]
+> Otherwise you can still poll for updates at a regular interval for any
+> other repo where you might not have admin rights."
+
+So a service marked "(Instant)" creates a repo webhook and needs admin. The
+plain variant polls with your OAuth token and needs nothing.
+
+### What is actually available without admin
+
+| Mechanism | No admin? | Push or poll |
+|---|---|---|
+| Repository webhooks | no | push |
+| GitHub App install | no, needs org owner | push |
+| PubSubHubbub (`github.com/hub`) | no, defunct | n/a |
+| Atom feeds | no PR or issue feed exists | poll |
+| Public events API | **yes** | poll |
+| Actions triggered by a third-party repo | no | n/a |
+| **Watch + email notifications** | **yes** | **genuine push** |
+
+Only the last is real push with no permission. Anyone can Watch a public
+repo, and GitHub's backend then emails you on PR activity. Routed to a
+dedicated address and through a mail-to-webhook bridge, that is true push.
+The costs are a hosted mail bridge and the fact that Watching a repo as busy
+as CircuitPython is a firehose to filter.
+
+A note on the events API, since it looks better than it is: it does carry
+`PullRequestEvent` unauthenticated, and conditional requests with `If-None-Match`
+return 304 without consuming rate limit, which makes continuous polling free.
+But `x-poll-interval: 60` says how often you may ask, not how fresh the answer
+is. [GitHub documents event latency as 30s to 6h](https://docs.github.com/en/rest/activity/events),
+and the endpoint sends `cache-control: max-age=300`.
+
+### Why no third-party bridge either
+
+Make.com, IFTTT and Pipedream can all poll a repo you do not administer and
+POST to the Adafruit IO webhook, with no admin anywhere. They were rejected
+on merit, not availability:
+
+- Make's free polling floor is 15 minutes, which is what the Actions cron
+  already does. Zero gain for one more dependency.
+- A bridge cannot replace the producer. It can report that a PR changed, but
+  it cannot run the five-concern scoring or render 66x21 text, so the
+  workflow still has to run. The bridge could only trigger it, which means
+  storing a GitHub token in a third party to fire `repository_dispatch`.
+
+### And it would not carry the data anyway
+
+A `pull_request` event is about 35KB, of which the useful part is the PR
+object plus the repository object. It reports `changed_files` as an integer
+and contains no file paths. Core-path blast radius is what produces every
+High rating in this dashboard, so a re-fetch against the API is required no
+matter how the notification arrives.
+
+Adafruit's own [PyPortal GitHub Stars Trophy](https://learn.adafruit.com/pyportal-github-stars-trophy)
+guide reaches the same conclusion by a different route: to watch
+`adafruit/circuitpython`, a repo the reader does not own, it polls the API
+from the device every 60 seconds.
+
+Against a panel with a 180 second minimum between refreshes, none of this is
+visible at the glass.
+
 ## Verified end to end
 
 Running unattended as of 2026-08-29. Boot log from the board, for comparison
