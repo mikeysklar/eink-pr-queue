@@ -171,6 +171,32 @@ without burning an 8 second refresh, so the LED carries state: amber
 initialising or painting, red WiFi or MQTT down, blue connected, green idle
 and current.
 
+## Verified end to end
+
+Running unattended as of 2026-08-29. Boot log from the board, for comparison
+if yours misbehaves:
+
+```
+init panel on onboard ZIF (SPI0)
+init AirLift on header SPI
+nina-fw 3.3.0
+wifi: connecting to <ssid>
+wifi ok, rssi -56
+mqtt: connecting
+mqtt connected, subscribed to <user>/f/pr-queue
+rx 781 bytes
+painting 781 bytes
+refresh took 7.9s
+idle
+```
+
+That `rx` arrived from the `/get` replay on connect, with no producer run
+involved. It is what stops a board that boots between pushes from sitting
+blank until the next one.
+
+`payload-test.txt` is worth keeping on the board as an offline fixture, so
+the panel can be re-tested with no network at all: read it, draw it.
+
 ## Libraries
 
 ```sh
