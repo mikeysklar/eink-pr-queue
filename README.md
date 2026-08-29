@@ -117,6 +117,31 @@ the radio has the header bus to itself, so the two never touch.
 
 D13 is also `board.LED`, so the red LED flickers on SPI traffic. Cosmetic.
 
+## What is in here
+
+```
+.github/workflows/
+  update-panel.yml        hourly cron, renders and POSTs to the feed
+
+producer/                 runs on GitHub's runners, not your machine
+  collect.py              gh pr list        -> raw.json
+  score.py                five concerns     -> rows.json
+  render.py               layout            -> the 66x21 screen
+  push.py                 POST to the Adafruit IO feed webhook
+  update.sh               all four, for running it by hand
+
+device/
+  code.py                 CircuitPython: subscribe, compare, draw
+  settings.toml.example   copy to settings.toml on CIRCUITPY and fill in
+
+pics/
+  eink-pr-queue.jpeg      the panel running, used at the top of this file
+```
+
+Everything under `producer/` is stdlib Python plus the `gh` CLI, so it runs
+locally exactly as it runs in CI. `.gitignore` keeps `.work/`, the real
+`settings.toml`, and `.push-state.json` out of the repo.
+
 ## Producer
 
 Pure stdlib Python plus the `gh` CLI. Nothing to install.
