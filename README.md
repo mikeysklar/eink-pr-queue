@@ -58,6 +58,51 @@ The webhook is the way in and MQTT is the way out. The panel cannot receive an
 inbound HTTP push, so it subscribes instead. Adafruit IO's outbound Actions
 are not used.
 
+## How the three talk
+
+Each hop uses a different protocol and a different credential.
+
+```
+┌─ GitHub runner ──────────────────────────────────────┐
+│  gh → api.github.com          HTTPS GET              │
+│                               auth: github.token     │
+│                               (auto, expires w/ job) │
+└──────────────────────┬───────────────────────────────┘
+                       │  HTTPS POST {"value": "..."}
+                       │  auth: the token IS the URL
+                       ▼
+┌─ Adafruit IO ────────────────────────────────────────┐
+│  feed pr-queue, history off, keeps only latest value │
+└──────────────────────┬───────────────────────────────┘
+                       │  MQTT over TLS, port 8883
+                       │  auth: <username> + AIO_KEY
+                       ▼
+┌─ ThinkInk + AirLift ─────────────────────────────────┐
+│  SUBSCRIBE <username>/f/pr-queue   ← waits, no poll  │
+│  PUBLISH  <username>/f/pr-queue/get  (on boot only)  │
+└──────────────────────────────────────────────────────┘
+```
+
+**The runner and the panel never meet.** They do not know each other exists.
+Adafruit IO is a mailbox: one drops off, the other picks up. Either can be
+offline without breaking the other.
+
+**Direction reverses at the broker.** GitHub to IO is a push the runner
+initiates. IO to panel is also a push, but only because the panel opened a
+long-lived MQTT connection first and is holding it open. The panel never
+polls; it sits on a socket and the broker writes to it.
+
+**Different credentials by design.** The runner holds only the webhook URL,
+which can write one feed and nothing else. The real `AIO_KEY`, which can read
+and delete every feed on the account, exists only in `settings.toml` on the
+board. If the repo secret leaked, the blast radius is "someone can write junk
+to one feed", rate limited to 2 per minute. That asymmetry is the main
+security property of the design, and it is why the webhook is the right
+ingest rather than the REST API.
+
+The `/get` publish is the one upstream message: it asks the broker to replay
+the current value, so a panel booting between hourly runs does not sit blank.
+
 ## The one wiring rule
 
 **The panel goes in the ThinkInk's own ZIF socket.** Wiring it to the header
