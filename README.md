@@ -36,25 +36,15 @@ dashboard onto 4.2 inch eInk via Adafruit IO.
                                                       ▼
   ┌──────────────────────────────────────────────────────────────────┐
   │  FEATHER DOUBLER                                                 │
+  │   Feather RP2040 ThinkInk  ◀── header SPI ──▶  AirLift (ESP32)   │
+  │   CircuitPython 10.3            CS=D13         nina-fw 3.3.0     │
+  │                                 READY=D11                        │
+  │                                 RESET=D12                        │
   │                                                                  │
-  │  ┌────────────────────────┐      ┌────────────────────────────┐  │
-  │  │ Feather RP2040 ThinkInk│      │ AirLift FeatherWing        │  │
-  │  │                        │◀────▶│ ESP32 co-processor         │  │
-  │  │  CircuitPython 10.3    │ hdr  │ nina-fw 3.3.0              │  │
-  │  │                        │ SPI  │                            │  │
-  │  │  SCK  GPIO14 ──────────┼──────┼──▶ SCK                     │  │
-  │  │  MOSI GPIO15 ──────────┼──────┼──▶ MOSI                    │  │
-  │  │  MISO GPIO8  ◀─────────┼──────┼─── MISO                    │  │
-  │  │  D13         ──────────┼──────┼──▶ CS     (also board.LED) │  │
-  │  │  D11         ◀─────────┼──────┼─── READY                   │  │
-  │  │  D12         ──────────┼──────┼──▶ RESET                   │  │
-  │  └───────────┬────────────┘      └────────────────────────────┘  │
-  │              │                                                   │
   │   hash the payload: identical screen, no repaint                 │
   │   hold, never drop, inside the 180s refresh floor                │
   └──────────────┼───────────────────────────────────────────────────┘
                  │ onboard 24-pin ZIF, SPI0, a SEPARATE bus
-                 │ EPD_SCK/MOSI GPIO22/23 + CS/DC/RESET/BUSY GPIO16-19
                  ▼
         ┌─────────────────────────────┐
         │  4.2" 400x300 SSD1683       │
@@ -74,6 +64,13 @@ are not used.
 via EyeSPI puts its RST and BUSY on D11 and D12, which is exactly where the
 AirLift's READY and RESET live. In the ZIF socket the panel sits on SPI0 and
 the radio has the header bus to itself, so the two never touch.
+
+| | Bus | Pins |
+|---|---|---|
+| Panel | SPI0, onboard 24-pin ZIF | `EPD_SCK`/`EPD_MOSI` GPIO22/23, `EPD_CS`/`DC`/`RESET`/`BUSY` GPIO16-19 |
+| AirLift | Feather header SPI | SCK/MOSI/MISO GPIO14/15/8, CS=D13, READY=D11, RESET=D12 |
+
+D13 is also `board.LED`, so the red LED flickers on SPI traffic. Cosmetic.
 
 ## Producer
 
