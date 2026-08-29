@@ -15,7 +15,9 @@ Geometry: a 400x300 SSD1683 panel through adafruit_epd's built-in 6x8 font
 gives 66 columns x 21 rows at a 14px pitch, using 396x294 of 400x300.
 
 Wire format: plain text, one line per screen row, at most 66 columns. A line
-beginning with '~' is drawn white-on-black; that is the only marker.
+beginning with '~' is drawn white-on-black. A line beginning with '@' is not
+a row at all: it carries the URL the device should render as a QR code in the
+reserved bottom right block, and is stripped before layout.
 
 A 4-gray variant was built and tried on real glass, shading each risk level a
 different tone. It read badly: the 6x8 font is too fine for DARK and LIGHT to
@@ -29,6 +31,14 @@ import json
 COLS, ROWS = 66, 21
 GLYPH_W, GLYPH_H = 6, 8
 PITCH = 14
+
+# A QR block is reserved in the bottom right corner: 33 modules at 3px is
+# 99px, drawn at (294, 192). Text on the rows it overlaps is narrowed so the
+# code keeps a real quiet zone instead of butting up against glyphs. 47
+# columns ends at x=282, leaving 12px, which is 4 modules.
+QR_URL = "https://github.com/mikeysklar/eink-pr-queue"
+QR_FROM_ROW = 13
+QR_COLS = 47
 
 # gutter, number, author, age, files, diff, risk, status
 W = (2, 7, 14, 5, 5, 12, 5, 16)  # 5-digit PR numbers need 7
@@ -98,14 +108,19 @@ def attention_lines(rows, budget):
     counter = len(flagged) > room and room >= 2
     shown = flagged[: room - 1] if counter else flagged[:room]
 
-    out = [fit("  Needs attention:", COLS)]
+    out = ["  Needs attention:"]
     for row in shown:
         why = row["why"][0] if row["why"] else (
             "stale, no maintainer review" if row["stale"] else "flagged")
-        out.append(fit(f"  #{row['number']} {why}", COLS))
+        out.append(f"  #{row['number']} {why}")
     if counter:
-        out.append(fit(f"  ...and {len(flagged) - len(shown)} more flagged", COLS))
+        out.append(f"  ...and {len(flagged) - len(shown)} more flagged")
     return out
+
+
+def line_width(index):
+    """Rows overlapping the QR block get the narrow width."""
+    return QR_COLS if index >= QR_FROM_ROW else COLS
 
 
 def render(data):
@@ -140,36 +155,60 @@ def render(data):
     n_stale = sum(1 for row in rows if row["stale"])
 
     while len(lines) < ROWS - 3:
-        lines.append(" " * COLS)
+        lines.append("")
 
-    lines.append("-" * COLS)
+    lines.append("-" * QR_COLS)
     hidden = f" (+{len(rows) - len(shown)})" if len(rows) > len(shown) else ""
     scope = f" <{window}d" if window else ""
-    lines.append(fit(
-        f"  {len(rows)} open{scope}{hidden}   {counts[2]} high  {counts[1]} med  "
-        f"{counts[0]} low   {n_stale} stale >{stale_days}d", COLS))
-    lines.append(fit(
-        "  " + "  ".join(
-            f"{by_status.get(key, 0)} {label}"
-            for key, label in (("approved", "appr"), ("changes_requested", "chg-req"),
-                               ("in_review", "review"), ("unreviewed", "unrev"),
-                               ("draft", "draft"))), COLS))
+    # Abbreviated: these rows sit beside the QR and only have QR_COLS to work
+    # with, so "high/med/low" becomes H/M/L and the status words shorten.
+    lines.append(
+        f"  {len(rows)} open{scope}{hidden}  {counts[2]}H {counts[1]}M "
+        f"{counts[0]}L  {n_stale} stale")
+    lines.append(
+        "  " + " ".join(
+            f"{by_status.get(key, 0)}{label}"
+            for key, label in (("approved", "appr"), ("changes_requested", "chg"),
+                               ("in_review", "rev"), ("unreviewed", "unrev"),
+                               ("draft", "draft"))))
 
-    return lines[:ROWS]
+    lines = [fit(line, line_width(i)) for i, line in enumerate(lines[:ROWS])]
+    return lines
 
 
 def serialize(lines):
-    return "\n".join(line.rstrip() for line in lines)
+    body = "\n".join(line.rstrip() for line in lines)
+    return body + "\n@" + QR_URL
+
+
+# Drawn into the preview so the terminal still shows what the panel shows.
+# The device renders a real QR here; this is the same 19 columns it occupies.
+_QR_ART = [
+    "  +---------------+",
+    "  | []..[]..#  [] |",
+    "  | .#  QR  .# .. |",
+    "  | []..#  []..[] |",
+    "  | .#  ..#  .#.. |",
+    "  | []..[]..#  [] |",
+    "  | .#..#  ..#  . |",
+    "  +---------------+",
+]
 
 
 def preview(lines):
     print(f"+{'-' * COLS}+   {COLS}x{len(lines)} chars "
           f"= {COLS * GLYPH_W}x{len(lines) * PITCH} px")
-    for line in lines:
+    for i, line in enumerate(lines):
         inv = line.startswith(INVERSE)
-        body = fit(line[1:] if inv else line, COLS)
+        body = line[1:] if inv else line
+        if i >= QR_FROM_ROW:
+            j = i - QR_FROM_ROW
+            art = _QR_ART[j] if j < len(_QR_ART) else ""
+            body = fit(body, QR_COLS) + fit(art, COLS - QR_COLS)
+        body = fit(body, COLS)
         print(f"|\033[7m{body}\033[0m|" if inv else f"|{body}|")
     print(f"+{'-' * COLS}+")
+    print(f"  QR -> {QR_URL}")
 
 
 def main():

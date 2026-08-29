@@ -191,7 +191,12 @@ host.
 ```
 66 columns x 21 rows, newline separated, trailing spaces stripped
 a line beginning with '~' is drawn white-on-black (the title bar)
+a line beginning with '@' is not a row: it carries a URL to draw as a QR
 ```
+
+The last 8 rows are narrowed to 47 columns because a QR block is reserved in
+the bottom right corner. The device strips the `@` line before layout, so it
+never consumes a row, and a payload without one simply draws no QR.
 
 66x21 is what 400x300 gives you with the `adafruit_epd` built-in 6x8 font,
 using 396x294 of the panel. Doing it this way means every layout change is a
@@ -217,6 +222,23 @@ framebuf, 15KB instead of 30KB, and draws in 8.0s instead of 10.0s.
 256px or wider: the core switches command 0x44 to 2-byte column addressing, but
 on SSD168x 0x44 is byte-addressed, so the X window collapses to about 8px and
 the rest is stale-RAM speckle. The framebuf path does not have it.
+
+**The QR is generated on the device, not shipped in the payload.** The host
+sends a 43 byte URL and `adafruit_miniqr` builds the code, which costs 0.66s
+to generate and 0.81s to draw against a refresh that already takes 10s.
+Shipping a bitmap instead would have cost roughly a hundred times the bytes
+for no gain.
+
+ECC Q (25% recovery) rather than L (7%), because the code has to survive
+being photographed, and sometimes photographed from a photograph. At 33
+modules and 3px each it occupies 99px.
+
+Worth knowing if you change the URL: comparing a generated matrix against a
+reference encoder byte for byte does not work, because two encoders make
+different but equally valid mask and padding choices. The check that means
+something is decoding it. Rendering the matrix to a PNG and running
+`cv2.QRCodeDetector().detectAndDecode()` over it takes a moment and actually
+proves the thing scans.
 
 **RAM is not the constraint.** 67KB free of 264KB with every import loaded and
 the framebuf allocated.
@@ -335,7 +357,7 @@ the panel can be re-tested with no network at all: read it, draw it.
 
 ```sh
 circup install adafruit_esp32spi adafruit_connection_manager \
-               adafruit_minimqtt adafruit_ticks neopixel
+               adafruit_minimqtt adafruit_ticks neopixel adafruit_miniqr
 ```
 
 `adafruit_epd`, `adafruit_framebuf` and `adafruit_bus_device` ship with most

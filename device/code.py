@@ -23,7 +23,9 @@ the X window collapses to ~8px and the rest of the panel is stale-RAM
 speckle. adafruit_epd does not have that bug.
 
 The payload is the finished screen, not data: N lines of at most 66 columns,
-newline separated. A line starting with '~' is drawn white-on-black. All
+newline separated. A line starting with '~' is drawn white-on-black, and a
+line starting with '@' is not a row at all: it carries a URL to render as a
+QR code in the reserved bottom right block. All
 layout lives in producer/render.py on the host, so changing the design never
 means reflashing this board.
 
@@ -40,6 +42,7 @@ import board
 import busio
 import digitalio
 import neopixel
+import adafruit_miniqr
 
 from adafruit_epd.epd import Adafruit_EPD
 from adafruit_epd.ssd1683 import Adafruit_SSD1683
@@ -70,6 +73,11 @@ MARGIN_X = 2
 # A full 4.2" refresh is ~15s of flashing and the panel wants recovery time
 # between them. Anything arriving inside this window is held, not dropped.
 MIN_REFRESH_S = 180
+
+# The QR block. 33 modules at 3px is 99px, and the host narrows the text on
+# the rows it overlaps so the code keeps a real quiet zone. ECC Q (25%
+# recovery) is chosen over L so the code still scans from a photo of a photo.
+QR_X, QR_Y, QR_SCALE = 294, 192, 3
 
 # --- status LED (so a headless panel can be diagnosed without a refresh) -----
 
@@ -103,6 +111,16 @@ display = Adafruit_SSD1683(
 def draw(payload):
     """Paint the panel from a finished text screen."""
     lines = payload.split("\n")
+    # '@' lines are metadata, not rows. Pull them out before laying anything
+    # out so they never consume a row or shift the grid.
+    qr_url = None
+    rows = []
+    for line in lines:
+        if line.startswith("@"):
+            qr_url = line[1:]
+        else:
+            rows.append(line)
+    lines = rows
     if not lines:
         return
     # Fit whatever we are sent: the host may send 21 airy lines or 30 dense
@@ -122,9 +140,27 @@ def draw(payload):
         if text.strip():
             display.text(text, MARGIN_X, top + (pitch - GLYPH_H) // 2, ink, size=1)
 
+    if qr_url:
+        modules = draw_qr(qr_url)
+        print("qr: {} modules at {}px for {}".format(modules, QR_SCALE, qr_url))
+
     started = time.monotonic()
     display.display()
     print("refresh took {:.1f}s".format(time.monotonic() - started))
+
+
+def draw_qr(url):
+    """Render `url` as a QR in the reserved bottom right block."""
+    qr = adafruit_miniqr.QRCode(qr_type=None, error_correct=adafruit_miniqr.Q)
+    qr.add_data(url.encode())
+    qr.make()
+    matrix = qr.matrix
+    for y in range(matrix.height):
+        for x in range(matrix.width):
+            if matrix[x, y]:
+                display.fill_rect(QR_X + x * QR_SCALE, QR_Y + y * QR_SCALE,
+                                  QR_SCALE, QR_SCALE, Adafruit_EPD.BLACK)
+    return matrix.width
 
 
 def checksum(text):
