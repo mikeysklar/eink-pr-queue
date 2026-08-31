@@ -4,3 +4,4 @@
 __pycache__/
 settings.toml
 .DS_Store
+case/build/

@@ -130,6 +130,10 @@ device/
 
 pics/
   eink-pr-queue.jpeg      the panel running, used at the top of this file
+
+case/
+  README.md               3D printed SKADIS case: rebuild recipe and assembly
+  params.json             every case dimension; drives kicad2freecad-enclosures
 ```
 
 Stdlib Python plus `gh`, so it runs locally exactly as in CI.
