@@ -1,6 +1,6 @@
 # eink-pr-queue
 
-![The rig: a 4.2 inch eInk panel showing 13 open CircuitPython pull requests ranked worst first, with a QR of this repo in the corner, driven by a Feather RP2040 ThinkInk and an AirLift FeatherWing on a doubler](pics/eink-pr-queue.jpeg)
+![The rig in its 3D printed case: a 4.2 inch eInk panel behind a pink bezel showing open CircuitPython pull requests, with a QR of this repo in the corner; the Feather RP2040 ThinkInk and AirLift FeatherWing sit on a doubler in the open tray below](pics/eink-pr-queue.jpeg)
 
 A Feather RP2040 ThinkInk and AirLift paint a GitHub pull request risk
 dashboard onto 4.2 inch eInk via Adafruit IO.
