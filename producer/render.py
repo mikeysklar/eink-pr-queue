@@ -22,7 +22,8 @@ reserved bottom right block, and is stripped before layout.
 A 4-gray variant was built and tried on real glass, shading each risk level a
 different tone. It read badly: the 6x8 font is too fine for DARK and LIGHT to
 stay crisp on e-ink, and the low-risk rows in particular turned mushy. Risk
-stays encoded as the '>' gutter, the sort order, and the RISK column instead.
+stays encoded as the '>' gutter and the RISK column instead. The body lists
+the newest PRs first; risk ordering lives in the Needs-attention block.
 """
 
 import argparse
@@ -142,7 +143,12 @@ def render(data):
 
     fixed = len(lines) + 4  # + footer rule + 2 summary + 1 spare
     body_budget = ROWS - fixed
-    shown = rows[: min(MAX_ROWS, body_budget)]
+    # The body shows the newest PRs, youngest first (ties: higher number is
+    # newer). rows.json stays worst-first, which still drives the attention
+    # list below, so flagged backlog is named even when it falls off the body.
+    recent = sorted(rows, key=lambda r: (r["age_days"] is None,
+                                         r["age_days"] or 0, -r["number"]))
+    shown = recent[: min(MAX_ROWS, body_budget)]
     lines.extend(pr_line(row) for row in shown)
     lines.extend(attention_lines(rows, body_budget - len(shown)))
 
